@@ -19,14 +19,29 @@ def _pyplot():
 
 
 def _channels_to_rgb(image):
-  """Collapse a decoded frame to something imshow accepts."""
+  """Collapse a decoded frame to something imshow accepts.
+
+  A ManiSkill task whose robot carries a wrist camera returns one image with
+  every camera concatenated on the channel axis -- PegInsertionSide-v1 is
+  base_camera + hand_camera, so 6 channels -- and frame stacking multiplies
+  channels the same way. Tile those views side by side rather than keeping
+  one, which would silently hide a camera in every figure while the MAE
+  numbers still averaged over both.
+  """
   image = np.asarray(image, np.float64)
   if image.ndim == 2:
     return image
-  if image.shape[-1] in (1, 3):
-    return image[..., 0] if image.shape[-1] == 1 else image
-  # Frame-stacked observations: show the most recent frame only.
-  return image[..., -3:]
+  channels = image.shape[-1]
+  if channels == 1:
+    return image[..., 0]
+  if channels == 3:
+    return image
+  if channels % 3 == 0:
+    views = channels // 3
+    height, width, _ = image.shape
+    image = image.reshape(height, width, views, 3).transpose(0, 2, 1, 3)
+    return image.reshape(height, views * width, 3)
+  return image[..., :3]
 
 
 def prefix_labels(count):

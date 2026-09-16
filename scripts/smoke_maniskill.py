@@ -67,9 +67,13 @@ def check_agent(state, args):
   assert 'image' in obs, (
       f'no image key in obs_space: {sorted(obs)}. The evaluation decodes an '
       'image; set env.maniskill.obs_mode to an rgb mode.')
-  assert obs['image'].shape[-1] == 3, (
-      f'image has {obs["image"].shape[-1]} channels; the figure grids need 3. '
-      'Set env.maniskill.num_frames=1.')
+  channels = obs['image'].shape[-1]
+  assert channels % 3 == 0, (
+      f'image has {channels} channels, not a multiple of 3; the figures tile '
+      'RGB views. Check env.maniskill.num_frames and the task cameras.')
+  if channels > 3:
+    # e.g. PegInsertionSide-v1: base_camera + hand_camera from panda_wristcam.
+    print(f'      {channels // 3} concatenated RGB views ({channels} channels)')
   assert not act['action'].discrete, 'expected a continuous action space'
   if args.checkpoint:
     from corewm_eval.manuscript_suite import resolve_checkpoint

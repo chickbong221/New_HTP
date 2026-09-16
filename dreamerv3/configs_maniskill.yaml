@@ -119,9 +119,9 @@ maniskill_rgb:
 #  assumed. Differences from maniskill_rgb:
 #
 #    * save_every 0, so exactly one checkpoint exists at the end of the run
-#      (maniskill_rgb uses -1, which never checkpoints at all);
-#    * image_size 64, matching the encoder/decoder resolution the Atari
-#      manuscript runs use, which keeps the decoder grids comparable.
+#      (maniskill_rgb uses -1, which never checkpoints at all).
+#
+#  Otherwise identical to maniskill_rgb, including image_size 128.
 #
 #  obs_mode rgb and num_frames 1 are required, not cosmetic: the evaluation
 #  decodes an `image` key and the figure grids expect 3 channels per frame.
@@ -177,6 +177,6 @@ maniskill_rgb_eval_ready:
       num_envs: 128
       obs_mode: rgb
       sim_backend: gpu
-      image_size: 64        # differs from maniskill_rgb
+      image_size: 128
       control_mode: pd_joint_delta_pos
       num_frames: 1
