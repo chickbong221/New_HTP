@@ -19,8 +19,12 @@ defaults:
       obs_mode: state
       sim_backend: gpu
       image_size: 64
-      control_mode: pd_joint_delta_pos
+      control_mode: pd_ee_delta_pos
       num_frames: 1
+      # false keeps obj_pose / goal_pos / tcp_to_obj_pos / obj_to_goal_pos in
+      # the state observation. ReLDreamer sets true (stripping them, as the
+      # mshab baselines do); this is a deliberate deviation, and it changes
+      # what the agent sees and the state dimensionality.
       nonprivileged_obs: false
       # 0 = keep the task's registered horizon (PickCube-v1 is 50, which is
       # already longer than the 33-frame evaluation protocol needs).
@@ -30,9 +34,9 @@ defaults:
       # Forwarded to gym.make through the wrapper's **kwargs. SAPIEN's default
       # shader allocates a full set of per-camera render targets (normals,
       # albedo, position, segmentation); 'minimal' keeps only what the
-      # observation needs. At num_envs=128 with a 128^2 sensor camera and a
-      # 512^2 human render camera per env, the default shader exhausts GPU
-      # memory during camera-group creation.
+      # observation needs, and without it camera-group creation can exhaust
+      # GPU memory at this num_envs and image_size. ReLDreamer passes this
+      # only on its MSHAB branch; setting it here is a deliberate deviation.
       shader_dir: minimal
 
   run:
@@ -66,7 +70,8 @@ defaults:
 maniskill_rgb:
   task: maniskill_PickCube-v1
   # size50m, inlined: YAML anchors do not cross files, so `<<: *size50m` from
-  # configs.yaml cannot be referenced from this overlay.
+  # configs.yaml cannot be referenced from this overlay. ReLDreamer uses
+  # size100m here; this is a deliberate deviation.
   .*\.rssm: {deter: 4096, hidden: 512, classes: 32}
   .*\.depth: 32
   .*\.units: 512
@@ -79,14 +84,17 @@ maniskill_rgb:
     train_ratio: 64.0   # lower than state: CNN encoder adds cost per update
     steps: 2e6
     log_every: 1500
-    save_every: -1        # no checkpointing -- see maniskill_rgb_eval_ready
+    # ReLDreamer's train loop has no periodic save at all and only calls
+    # cp.save() when the run ends, so its save_every: 50000 is dead config.
+    # 0 reproduces that behaviour here: one checkpoint, at the end.
+    save_every: 0
     report_every: 7200
     exact_env_action_budget: false  # rejected by train_maniskill; see its docstring
   batch_size: 8         # smaller: [8, 64, 128, 128, 3] RGB tensors are large
   batch_length: 64
   replay_context: 1
   replay:
-    size: 300000        # TD-MPC2 rgb: buffer_size=100_000 (pixels expensive)
+    size: 600000        # TD-MPC2 rgb: buffer_size=100_000 (pixels expensive)
     online: true
     fracs: {uniform: 1.0, priority: 0.0, recency: 0.0}
   jax:
@@ -100,31 +108,27 @@ maniskill_rgb:
   env:
     maniskill:
       use_seed: true
-      num_envs: 128
+      num_envs: 126
       obs_mode: rgb
       sim_backend: gpu
       image_size: 128
-      control_mode: pd_joint_delta_pos
+      control_mode: pd_ee_delta_pos   # 3-dim xyz delta + gripper = 4-dim action
       num_frames: 1          # no frame stacking → 3 channels input to CNN
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  maniskill_rgb_eval_ready — a run whose checkpoints the CoRe-WM block/prefix
-#  evaluation (corewm_eval.manuscript_suite) can be pointed at afterwards.
+#  maniskill_rgb_eval_ready — NOW BYTE-IDENTICAL TO maniskill_rgb.
 #
-#  SELF-CONTAINED ON PURPOSE. Presets do not inherit from one another; they are
-#  applied in the order given on the command line, so `--configs
-#  maniskill_rgb_eval_ready` alone would otherwise fall back to the obs_mode
-#  'state' default and silently produce a checkpoint with no image decoder.
-#  Everything it needs is therefore repeated from maniskill_rgb rather than
-#  assumed. Differences from maniskill_rgb:
-#
-#    * save_every 0, so exactly one checkpoint exists at the end of the run
-#      (maniskill_rgb uses -1, which never checkpoints at all).
-#
-#  Otherwise identical to maniskill_rgb, including image_size 128.
+#  It existed because maniskill_rgb used to set save_every -1 (never
+#  checkpoint) and image_size 64. Both presets now match ReLDreamer: one
+#  checkpoint at the end of the run, image_size 128. Prefer maniskill_rgb;
+#  this name is kept only so existing commands keep working, and it is
+#  spelled out in full rather than aliased because presets do not inherit
+#  from one another -- they are applied in the order given on the command
+#  line, so a partial preset would silently fall back to the obs_mode 'state'
+#  default and produce a checkpoint with no image decoder.
 #
 #  obs_mode rgb and num_frames 1 are required, not cosmetic: the evaluation
-#  decodes an `image` key and the figure grids expect 3 channels per frame.
+#  decodes an `image` key and the figures tile 3-channel views.
 #
 #  No horizon override is needed. The protocol needs
 #  corewm_eval.config.MIN_CLIP_LENGTH = 16 warm-up + 16 imagined + 1 initial
@@ -149,10 +153,9 @@ maniskill_rgb_eval_ready:
     train_ratio: 64.0
     steps: 2e6
     log_every: 1500
-    # Differs from maniskill_rgb, which never checkpoints. Wall-clock seconds,
-    # not steps: 0 means no periodic saves and exactly one final save when the
-    # run finishes, which is all the evaluation needs. Set a positive value to
-    # also snapshot every N seconds.
+    # Wall-clock seconds, not steps: 0 means no periodic saves and exactly one
+    # final save when the run finishes, matching ReLDreamer. Set a positive
+    # value to also snapshot every N seconds.
     save_every: 0
     report_every: 7200
     exact_env_action_budget: false
@@ -160,7 +163,7 @@ maniskill_rgb_eval_ready:
   batch_length: 64
   replay_context: 1
   replay:
-    size: 300000
+    size: 600000
     online: true
     fracs: {uniform: 1.0, priority: 0.0, recency: 0.0}
   jax:
@@ -174,9 +177,9 @@ maniskill_rgb_eval_ready:
   env:
     maniskill:
       use_seed: true
-      num_envs: 128
+      num_envs: 126
       obs_mode: rgb
       sim_backend: gpu
       image_size: 128
-      control_mode: pd_joint_delta_pos
+      control_mode: pd_ee_delta_pos   # 3-dim xyz delta + gripper = 4-dim action
       num_frames: 1

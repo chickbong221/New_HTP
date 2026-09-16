@@ -466,15 +466,28 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
   cp = elements.Checkpoint(logdir / 'ckpt')
   cp.step = step
   cp.agent = agent
+
+  # Exactly one checkpoint, overwritten in place. elements.Checkpoint.save()
+  # with no argument writes ckpt/<timestamp>/, which leaves one directory per
+  # save; writing into the checkpoint directory itself leaves ckpt/agent.pkl
+  # and nothing beside it. A periodic run.save_every is then pure crash
+  # insurance, each save replacing the last, and the end-of-training save
+  # rewrites the same files.
+  ckpt_dir = logdir / 'ckpt'
+
+  def save_checkpoint():
+    cp.save(ckpt_dir)
+
   # The reference omits the replay buffer from ManiSkill checkpoints: a
   # 300k-transition RGB buffer makes every save stall the run.
   if args.from_checkpoint:
     elements.checkpoint.load(args.from_checkpoint, dict(
         agent=bind(agent.load, regex=args.from_checkpoint_regex)))
-  # Only resume from the run's own ckpt dir if it already exists; do not
-  # auto-save a fresh checkpoint at start.
-  if (logdir / 'ckpt').exists():
-    cp.load()
+  # Resume only when this run has actually written a checkpoint before; the
+  # directory alone can exist without one. Load by explicit path, since there
+  # is no timestamped folder or `latest` pointer to discover.
+  if (ckpt_dir / 'agent.pkl').exists():
+    cp.load(ckpt_dir)
 
   print('Start training loop')
   policy = lambda *xs: agent.policy(*xs, mode='train')
@@ -562,11 +575,13 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
       logger.write()
 
     if should_save and should_save(step):
-      cp.save()
+      save_checkpoint()
 
+  # Rewrites the same checkpoint one last time, so whatever the periodic saves
+  # left behind is replaced by the end-of-training state.
   if args.save_every >= 0:
-    cp.save()
-  paper.finalize(step, checkpoint_path=logdir / 'ckpt')
+    save_checkpoint()
+  paper.finalize(step, checkpoint_path=ckpt_dir)
   if eval_env is not None:
     eval_env.close()
   driver.close()
