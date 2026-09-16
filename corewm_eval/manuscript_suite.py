@@ -43,6 +43,33 @@ def source(game, seed):
   return candidates[0]
 
 
+def resolve_checkpoint(path):
+  """Return the directory that actually holds the checkpoint entries.
+
+  elements.Checkpoint writes each save into a timestamped subfolder of its
+  directory and records the current one in `latest`, so <logdir>/ckpt is the
+  natural thing to pass but is one level above what load() wants. An Atari
+  milestone path already points at the entries and is returned unchanged.
+  """
+  path = Path(path)
+  if (path / 'agent.pkl').exists():
+    return path
+  latest = path / 'latest'
+  if latest.is_file():
+    candidate = path / latest.read_text().strip()
+    if (candidate / 'agent.pkl').exists():
+      return candidate
+  saves = sorted(p for p in path.glob('*') if (p / 'agent.pkl').is_file())
+  if len(saves) == 1:
+    return saves[0]
+  if saves:
+    # Never guess which save a published number came from.
+    raise RuntimeError(
+        f'{path} holds {len(saves)} checkpoints and no usable `latest`. Pass '
+        f'one explicitly: {[str(p) for p in saves]}')
+  raise RuntimeError(f'No agent.pkl in {path} or any of its subdirectories')
+
+
 def config_path(checkpoint):
   """Find the run config for a checkpoint directory.
 
@@ -77,7 +104,8 @@ def worker(out, game, seed, checkpoint=None):
       cka_matrix, full_error_row, marginal_block_gain, marginal_visual_change,
       off_diagonal_mean, performance_gap, prefix_error_matrix)
   from . import manuscript_figures as figures
-  cp = Path(checkpoint) if checkpoint else source(game, seed)
+  cp = resolve_checkpoint(checkpoint) if checkpoint else source(game, seed)
+  print(f'Checkpoint: {cp}')
   config = _load_config(config_path(cp))
   config = config.update(logdir=str(out / game / f'seed_{seed}/runtime'))
   agent = main_htp.make_agent(config)

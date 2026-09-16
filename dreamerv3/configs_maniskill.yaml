@@ -40,6 +40,21 @@ defaults:
     eval_video_freq: 0
     eval_reconfiguration_frequency: 1
 
+  # W&B settings as config keys. configs.yaml has no such keys -- upstream
+  # make_logger reads WANDB_* from the environment -- and elements.Config
+  # rejects a preset that sets a key the defaults never declared, so they are
+  # declared here. main_maniskill.make_logger feeds them to the environment
+  # with setdefault, which keeps an already-exported WANDB_* variable
+  # authoritative for sweeps and lets the config fill in the rest.
+  logger:
+    wandb_project: ''
+    wandb_entity: ''
+    wandb_group: ''
+    # Empty resolves to dreamerv3-<task>-<obs_mode>-<seed> at startup rather
+    # than a literal that would mislabel every run but the one it was copied
+    # from. Override with --logger.wandb_name.
+    wandb_name: ''
+
 # ──────────────────────────────────────────────────────────────────────────────
 #  maniskill_rgb — mirrors dreamerv3-maniskill-hab's preset of the same name.
 #  Run with:  python -m dreamerv3.main_maniskill --configs maniskill_rgb \
@@ -50,11 +65,11 @@ defaults:
 
 maniskill_rgb:
   task: maniskill_PickCube-v1
-  # size100m, inlined: YAML anchors do not cross documents, so `<<: *size100m`
-  # from configs.yaml cannot be referenced here.
-  .*\.rssm: {deter: 6144, hidden: 768, classes: 48}
-  .*\.depth: 48
-  .*\.units: 768
+  # size50m, inlined: YAML anchors do not cross files, so `<<: *size50m` from
+  # configs.yaml cannot be referenced from this overlay.
+  .*\.rssm: {deter: 4096, hidden: 512, classes: 32}
+  .*\.depth: 32
+  .*\.units: 512
   run:
     envs: 1
     eval_envs: 4
@@ -64,10 +79,10 @@ maniskill_rgb:
     train_ratio: 64.0   # lower than state: CNN encoder adds cost per update
     steps: 2e6
     log_every: 1500
-    save_every: -1        # no checkpointing
+    save_every: -1        # no checkpointing -- see maniskill_rgb_eval_ready
     report_every: 7200
     exact_env_action_budget: false  # rejected by train_maniskill; see its docstring
-  batch_size: 32        # smaller: [16, 64, 64, 64, 9] RGB tensors are large
+  batch_size: 8         # smaller: [8, 64, 128, 128, 3] RGB tensors are large
   batch_length: 64
   replay_context: 1
   replay:
@@ -77,11 +92,11 @@ maniskill_rgb:
   jax:
     prealloc: false     # critical: ManiSkill and JAX share GPU
   logger:
-    # The reference sets logger.wandb_project / wandb_entity / wandb_group /
-    # wandb_name here. New_HTP's make_logger reads those from the WANDB_*
-    # environment variables instead, so those keys are omitted. Override with
-    # `--logger.outputs jsonl` for a local smoke test without W&B.
     outputs: [wandb]
+    wandb_project: maniskill
+    wandb_entity: letuanhf-hanoi-university-of-science-and-technology
+    wandb_group: na
+    wandb_name: ''      # resolves to dreamerv3-<task>-<obs_mode>-<seed>
   env:
     maniskill:
       use_seed: true
@@ -121,9 +136,9 @@ maniskill_rgb:
 
 maniskill_rgb_eval_ready:
   task: maniskill_PickCube-v1
-  .*\.rssm: {deter: 6144, hidden: 768, classes: 48}
-  .*\.depth: 48
-  .*\.units: 768
+  .*\.rssm: {deter: 4096, hidden: 512, classes: 32}
+  .*\.depth: 32
+  .*\.units: 512
   run:
     envs: 1
     eval_envs: 4
@@ -136,7 +151,7 @@ maniskill_rgb_eval_ready:
     save_every: 900       # differs from maniskill_rgb: the evaluation needs a checkpoint
     report_every: 7200
     exact_env_action_budget: false
-  batch_size: 32
+  batch_size: 8
   batch_length: 64
   replay_context: 1
   replay:
@@ -147,6 +162,10 @@ maniskill_rgb_eval_ready:
     prealloc: false
   logger:
     outputs: [wandb]
+    wandb_project: maniskill
+    wandb_entity: letuanhf-hanoi-university-of-science-and-technology
+    wandb_group: na
+    wandb_name: ''
   env:
     maniskill:
       use_seed: true

@@ -6,7 +6,9 @@ break is reported where it happens instead of as a traceback three layers
 down. Nothing here needs a trained checkpoint: an untrained agent exercises
 exactly the same plumbing. Pass --checkpoint to smoke real weights instead.
 
-  python scripts/smoke_maniskill.py --logdir /tmp/ms_smoke
+  python scripts/smoke_maniskill.py
+
+Writes to runs/ms_smoke under the repo by default; override with --logdir.
 """
 
 import argparse
@@ -18,7 +20,8 @@ from pathlib import Path
 # Running a script by path puts scripts/ on sys.path, not the repo root, so
 # make the repo importable before anything below reaches for it. This is what
 # lets the script run as `python scripts/smoke_maniskill.py` from anywhere.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO))
 
 import numpy as np  # noqa: E402
 
@@ -69,10 +72,12 @@ def check_agent(state, args):
       'Set env.maniskill.num_frames=1.')
   assert not act['action'].discrete, 'expected a continuous action space'
   if args.checkpoint:
+    from corewm_eval.manuscript_suite import resolve_checkpoint
+    cp = resolve_checkpoint(args.checkpoint)
     loaded = elements.Checkpoint()
     loaded.agent = agent
-    loaded.load(Path(args.checkpoint), keys=['agent'])
-    print(f'      loaded weights from {args.checkpoint}')
+    loaded.load(cp, keys=['agent'])
+    print(f'      loaded weights from {cp}')
 
 
 @stage('build env and check the batched interface')
@@ -214,7 +219,8 @@ def check_matrices(state, args):
 
 def main():
   p = argparse.ArgumentParser()
-  p.add_argument('--logdir', type=Path, default=Path('/tmp/ms_smoke'))
+  # Under the repo, not /tmp. `runs/` is already in .gitignore.
+  p.add_argument('--logdir', type=Path, default=REPO / 'runs/ms_smoke')
   p.add_argument('--task', default='maniskill_PickCube-v1')
   p.add_argument('--configs', default='maniskill_rgb_eval_ready size1m corewm_full',
                  help='space-separated preset names, applied in order')

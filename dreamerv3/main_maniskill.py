@@ -180,7 +180,29 @@ def make_agent(config):
   ))
 
 
+def wandb_run_name(config):
+  """dreamerv3-<task>-<obs_mode>-<seed>, unless the config names the run."""
+  if config.logger.wandb_name:
+    return str(config.logger.wandb_name)
+  return '-'.join([
+      'dreamerv3', config.task.split('_', 1)[1],
+      str(config.env.maniskill.obs_mode), str(config.seed)])
+
+
 def make_logger(config):
+  # main_htp.make_logger reads its W&B settings from WANDB_* environment
+  # variables, which is why configs_maniskill.yaml has to hand them over this
+  # way rather than main_htp reading the config directly -- main_htp is on the
+  # Atari path and stays untouched. setdefault keeps an already-exported
+  # variable authoritative for sweeps and lets the config fill in the rest.
+  for key, value in [
+      ('WANDB_PROJECT', config.logger.wandb_project),
+      ('WANDB_ENTITY', config.logger.wandb_entity),
+      ('WANDB_GROUP', config.logger.wandb_group),
+      ('WANDB_RUN_NAME', wandb_run_name(config)),
+  ]:
+    if value:
+      os.environ.setdefault(key, str(value))
   # Keep ManiSkill metrics visible to terminal / normal logger outputs.
   extra = '|episode/score|epstats/log/|fps/|train/success'
   return base.make_logger(
