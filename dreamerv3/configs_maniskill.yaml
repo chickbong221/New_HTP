@@ -118,7 +118,8 @@ maniskill_rgb:
 #  Everything it needs is therefore repeated from maniskill_rgb rather than
 #  assumed. Differences from maniskill_rgb:
 #
-#    * save_every > 0, so checkpoints exist at all;
+#    * save_every 0, so exactly one checkpoint exists at the end of the run
+#      (maniskill_rgb uses -1, which never checkpoints at all);
 #    * image_size 64, matching the encoder/decoder resolution the Atari
 #      manuscript runs use, which keeps the decoder grids comparable.
 #
@@ -148,7 +149,11 @@ maniskill_rgb_eval_ready:
     train_ratio: 64.0
     steps: 2e6
     log_every: 1500
-    save_every: 900       # differs from maniskill_rgb: the evaluation needs a checkpoint
+    # Differs from maniskill_rgb, which never checkpoints. Wall-clock seconds,
+    # not steps: 0 means no periodic saves and exactly one final save when the
+    # run finishes, which is all the evaluation needs. Set a positive value to
+    # also snapshot every N seconds.
+    save_every: 0
     report_every: 7200
     exact_env_action_budget: false
   batch_size: 8

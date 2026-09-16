@@ -62,8 +62,11 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
   should_train = TraceableRatio(args.train_ratio / batch_steps)
   should_log = embodied.LocalClock(args.log_every)
   should_report = embodied.LocalClock(args.report_every)
-  # save_every < 0 disables checkpointing entirely, matching the reference's
-  # maniskill presets. Any value >= 0 restores New_HTP's periodic saves.
+  # run.save_every is wall-clock seconds, not steps: embodied.LocalClock
+  # compares time.time() and ignores the step it is handed. Three regimes:
+  #   < 0  never checkpoint, matching the reference's maniskill presets
+  #   = 0  no periodic saves; only the single final save at the end of the run
+  #   > 0  save every N seconds, plus the final save
   should_save = args.save_every >= 0 and embodied.LocalClock(args.save_every)
 
   start_time = time()
