@@ -93,30 +93,66 @@ maniskill_rgb:
       num_frames: 1          # no frame stacking → 3 channels input to CNN
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  maniskill_rgb_eval_ready — maniskill_rgb with the settings the CoRe-WM
-#  block/prefix evaluation (corewm_eval.manuscript_suite) needs from a
-#  checkpoint it is later pointed at:
+#  maniskill_rgb_eval_ready — a run whose checkpoints the CoRe-WM block/prefix
+#  evaluation (corewm_eval.manuscript_suite) can be pointed at afterwards.
+#
+#  SELF-CONTAINED ON PURPOSE. Presets do not inherit from one another; they are
+#  applied in the order given on the command line, so `--configs
+#  maniskill_rgb_eval_ready` alone would otherwise fall back to the obs_mode
+#  'state' default and silently produce a checkpoint with no image decoder.
+#  Everything it needs is therefore repeated from maniskill_rgb rather than
+#  assumed. Differences from maniskill_rgb:
 #
 #    * save_every > 0, so checkpoints exist at all;
 #    * image_size 64, matching the encoder/decoder resolution the Atari
-#      manuscript runs use, which keeps the decoder grids comparable;
-#    * obs_mode rgb and num_frames 1, inherited from maniskill_rgb: the
-#      evaluation decodes an `image` key and the figure grids expect 3
-#      channels per frame.
+#      manuscript runs use, which keeps the decoder grids comparable.
+#
+#  obs_mode rgb and num_frames 1 are required, not cosmetic: the evaluation
+#  decodes an `image` key and the figure grids expect 3 channels per frame.
 #
 #  No horizon override is needed. The protocol needs
 #  corewm_eval.config.MIN_CLIP_LENGTH = 16 warm-up + 16 imagined + 1 initial
 #  = 33 frames in a single episode, which fits inside the 50 steps that
 #  PickCube-v1, StackCube-v1 and PushCube-v1 register natively.
 #  PullCubeTool-v1 keeps its native 100. The max_episode_steps /
-#  eval_max_episode_steps knobs below stay available as an escape hatch for a
-#  task that registers fewer than 33 steps.
+#  eval_max_episode_steps knobs stay available as an escape hatch for a task
+#  that registers fewer than 33 steps.
 # ──────────────────────────────────────────────────────────────────────────────
 
 maniskill_rgb_eval_ready:
   task: maniskill_PickCube-v1
+  .*\.rssm: {deter: 6144, hidden: 768, classes: 48}
+  .*\.depth: 48
+  .*\.units: 768
   run:
-    save_every: 900
+    envs: 1
+    eval_envs: 4
+    eval_eps: 1
+    eval_freq: 50000
+    eval_video_freq: 1000000
+    train_ratio: 64.0
+    steps: 2e6
+    log_every: 1500
+    save_every: 900       # differs from maniskill_rgb: the evaluation needs a checkpoint
+    report_every: 7200
+    exact_env_action_budget: false
+  batch_size: 32
+  batch_length: 64
+  replay_context: 1
+  replay:
+    size: 300000
+    online: true
+    fracs: {uniform: 1.0, priority: 0.0, recency: 0.0}
+  jax:
+    prealloc: false
+  logger:
+    outputs: [wandb]
   env:
     maniskill:
-      image_size: 64
+      use_seed: true
+      num_envs: 128
+      obs_mode: rgb
+      sim_backend: gpu
+      image_size: 64        # differs from maniskill_rgb
+      control_mode: pd_joint_delta_pos
+      num_frames: 1
