@@ -140,7 +140,8 @@ def check_clip(state, args):
 def check_evaluation(state, args):
   from corewm_eval.config import MANUSCRIPT_START, ROLLOUT_LENGTH
   from corewm_eval.extraction import (
-      ExtractionSpec, evaluation_seed, previous_actions)
+      ExtractionSpec, assert_rollout_actions, evaluation_seed,
+      previous_actions)
   from corewm_eval.manuscript_eval import evaluate_readonly
   from corewm_eval.smoke_test import _tree_hash
   config, agent, ep = state['config'], state['agent'], state['clip']
@@ -157,9 +158,9 @@ def check_evaluation(state, args):
   print(f'      evaluated in {time.time() - start:.1f}s')
   state['result'] = result
   stop = MANUSCRIPT_START + ROLLOUT_LENGTH
-  np.testing.assert_array_equal(
-      result['used_actions']['action'],
-      actions['action'][:, MANUSCRIPT_START:stop])
+  used = np.asarray(result['used_actions']['action'])
+  assert_rollout_actions(used, actions['action'][:, MANUSCRIPT_START:stop])
+  print(f'      actions returned as {used.dtype} (RSSM compute dtype)')
   assert result['full'].shape[1] == ROLLOUT_LENGTH, result['full'].shape
   assert len(result['prefixes']) == len(dims), len(result['prefixes'])
   assert len(result['one_blocks']) == len(dims)

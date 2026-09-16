@@ -125,6 +125,28 @@ def open_loop_readonly(agent, start_state, actions, spec, seed, params=None):
   return jax.tree.map(np.asarray, outputs)
 
 
+def assert_rollout_actions(used, wanted):
+  """Check that an imagination consumed exactly the intended action slice.
+
+  RSSM.imagine runs its inputs through nn.cast, which casts floating-point
+  arrays to jax.compute_dtype (bfloat16 by default) and leaves integers alone.
+  A discrete action therefore returns byte-identical, while a continuous one
+  returns rounded to roughly three significant digits -- about 0.4% relative
+  error, which is not a mismatch. A misaligned slice differs by order 1, so
+  comparing in float32 with a tolerance between the two still pins alignment.
+  """
+  used, wanted = np.asarray(used), np.asarray(wanted)
+  message = 'Imagination did not consume the intended action slice'
+  if used.shape != wanted.shape:
+    raise AssertionError(f'{message}: {used.shape} vs {wanted.shape}')
+  if used.dtype == wanted.dtype:
+    np.testing.assert_array_equal(used, wanted, err_msg=message)
+    return
+  np.testing.assert_allclose(
+      used.astype(np.float32), wanted.astype(np.float32),
+      rtol=1e-2, atol=1e-2, err_msg=message)
+
+
 def previous_actions(actions, cardinality=None):
   """Shift an action sequence one step along TIME, which is axis 0.
 

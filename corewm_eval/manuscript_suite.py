@@ -68,7 +68,9 @@ def worker(out, game, seed, checkpoint=None):
   import elements
   from dreamerv3 import main_htp
   from .smoke_test import _load_config, _tree_hash
-  from .extraction import ExtractionSpec, evaluation_seed, previous_actions
+  from .extraction import (
+      ExtractionSpec, assert_rollout_actions, evaluation_seed,
+      previous_actions)
   from .manuscript_clips import collect_clips
   from .manuscript_eval import evaluate_readonly
   from .metrics import (
@@ -110,7 +112,7 @@ def worker(out, game, seed, checkpoint=None):
         agent, obs, {'action': previous_actions(ep['action'])[None]}, actions,
         spec, evaluation_seed(0, episode, MANUSCRIPT_START), MANUSCRIPT_START)
     stop = MANUSCRIPT_START + ROLLOUT_LENGTH
-    np.testing.assert_array_equal(
+    assert_rollout_actions(
         result['used_actions']['action'],
         actions['action'][:, MANUSCRIPT_START:stop])
     # Horizon h is scored against frame T + h, so the target window starts at

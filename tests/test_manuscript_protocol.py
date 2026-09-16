@@ -9,7 +9,7 @@ from corewm_eval import manuscript_clips, manuscript_eval
 from corewm_eval.config import (
     CLIP_LENGTH, HORIZONS, MANUSCRIPT_START, MIN_CLIP_LENGTH, NUM_PREFIXES,
     ROLLOUT_LENGTH)
-from corewm_eval.extraction import previous_actions
+from corewm_eval.extraction import assert_rollout_actions, previous_actions
 from corewm_eval.metrics import (
     full_error_row, horizon_indices, marginal_block_gain,
     marginal_visual_change, off_diagonal_mean, performance_gap,
@@ -181,6 +181,44 @@ def test_previous_actions_shifts_along_time_for_continuous_actions():
   expected = np.zeros_like(actions)
   expected[1:] = actions[:-1]
   np.testing.assert_array_equal(previous_actions(actions), expected)
+
+
+def _bfloat16_round(values):
+  """Quantize onto the bfloat16 grid: 1 implicit + 7 stored mantissa bits."""
+  values = np.asarray(values, np.float32)
+  scale = np.where(values == 0, 1.0, np.exp2(np.floor(np.log2(
+      np.abs(np.where(values == 0, 1.0, values)))) - 7))
+  return (np.round(values / scale) * scale).astype(np.float32)
+
+
+def test_rollout_action_check_survives_the_rssm_compute_dtype():
+  # RSSM.imagine casts float actions to jax.compute_dtype (bfloat16), so a
+  # continuous action comes back rounded. That must not read as a mismatch.
+  rng = np.random.default_rng(0)
+  wanted = rng.uniform(-1.3, 1.3, size=(1, ROLLOUT_LENGTH, 8)).astype(np.float32)
+  assert_rollout_actions(_bfloat16_round(wanted).astype(np.float16), wanted)
+
+
+def test_rollout_action_check_is_exact_for_discrete_actions():
+  wanted = np.arange(ROLLOUT_LENGTH, dtype=np.int32)[None]
+  assert_rollout_actions(wanted.copy(), wanted)
+  with pytest.raises(AssertionError):
+    assert_rollout_actions(wanted + 1, wanted)
+
+
+def test_rollout_action_check_still_catches_a_misaligned_slice():
+  rng = np.random.default_rng(1)
+  clip = rng.uniform(-1, 1, size=(1, 64, 8)).astype(np.float32)
+  wanted = clip[:, MANUSCRIPT_START:MANUSCRIPT_START + ROLLOUT_LENGTH]
+  shifted = clip[:, MANUSCRIPT_START + 1:MANUSCRIPT_START + 1 + ROLLOUT_LENGTH]
+  with pytest.raises(AssertionError):
+    assert_rollout_actions(shifted.astype(np.float16), wanted)
+
+
+def test_rollout_action_check_rejects_a_wrong_length():
+  wanted = np.zeros((1, ROLLOUT_LENGTH, 8), np.float32)
+  with pytest.raises(AssertionError):
+    assert_rollout_actions(wanted[:, :-1], wanted)
 
 
 # -- read-only guarantees --------------------------------------------------
