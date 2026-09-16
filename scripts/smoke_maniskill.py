@@ -15,11 +15,16 @@ import time
 import traceback
 from pathlib import Path
 
-import numpy as np
+# Running a script by path puts scripts/ on sys.path, not the repo root, so
+# make the repo importable before anything below reaches for it. This is what
+# lets the script run as `python scripts/smoke_maniskill.py` from anywhere.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Sets XLA_PYTHON_CLIENT_PREALLOCATE before JAX initialises, and puts the repo
-# root on sys.path the same way the real entry point does.
-from dreamerv3 import main_maniskill  # noqa: E402  (import order is load-bearing)
+import numpy as np  # noqa: E402
+
+# Sets XLA_PYTHON_CLIENT_PREALLOCATE before JAX initialises, so the import
+# order here is load-bearing.
+from dreamerv3 import main_maniskill  # noqa: E402
 
 import elements  # noqa: E402
 
