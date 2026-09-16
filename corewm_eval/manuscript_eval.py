@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import ninjax as nj
 import numpy as np
 
+from .config import MANUSCRIPT_START, ROLLOUT_LENGTH
 from .extraction import _flat_to_feat
 
 
@@ -34,8 +35,10 @@ def _evaluate(model, obs, prevact, actions, spec, start):
   cumulative = model.htp_recon.reconstruct(one_z, one_h)
   isolated = residual_blocks(cumulative)
   first = {k: posterior[k][:, start] for k in ('deter', 'stoch')}
-  rollout_actions = {k: v[:, start:start + 64] for k, v in actions.items()}
-  _, future, used = model.dyn.imagine(first, rollout_actions, 64, training=False)
+  rollout_actions = {
+      k: v[:, start:start + ROLLOUT_LENGTH] for k, v in actions.items()}
+  _, future, used = model.dyn.imagine(
+      first, rollout_actions, ROLLOUT_LENGTH, training=False)
   future_h = model.feat2h(future)
   future_z = model.htp_proj(future_h)
   prefix_h = model.htp_recon.reconstruct(future_z, future_h)
@@ -45,7 +48,8 @@ def _evaluate(model, obs, prevact, actions, spec, start):
           'used_actions': used}
 
 
-def evaluate_readonly(agent, obs, prevact, actions, spec, seed, start=16):
+def evaluate_readonly(agent, obs, prevact, actions, spec, seed,
+                      start=MANUSCRIPT_START):
   params = agent.save()['params']
   pure = nj.pure(lambda: _evaluate(agent.model, obs, prevact, actions, spec, start))
   with jax._src.config.explicit_device_put_scope():

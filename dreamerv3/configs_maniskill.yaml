@@ -1,0 +1,122 @@
+# ManiSkill config overlay.
+#
+# This file is NOT read by dreamerv3.main or dreamerv3.main_htp. It is
+# deep-merged into configs.yaml by dreamerv3.main_maniskill only, so that the
+# Atari runs keep a byte-identical config tree -- and therefore an identical
+# paper-artifact resolved_config_hash -- to before the ManiSkill merge. The
+# hash is computed from `args`, which embeds `config.env`, so adding
+# `env.maniskill` to configs.yaml itself would invalidate every published
+# checkpoint manifest.
+#
+# Values follow dreamerv3-maniskill-hab/dreamerv3/configs.yaml.
+
+defaults:
+
+  env:
+    maniskill:
+      use_seed: true
+      num_envs: 32
+      obs_mode: state
+      sim_backend: gpu
+      image_size: 64
+      control_mode: pd_joint_delta_pos
+      num_frames: 1
+      nonprivileged_obs: false
+      # 0 = keep the task's registered horizon (PickCube-v1 is 50, which is
+      # already longer than the 33-frame evaluation protocol needs).
+      max_episode_steps: 0
+      eval_max_episode_steps: 0
+      reward_mode: normalized_dense  # 'sparse' | 'dense' | 'normalized_dense'
+      # Forwarded to gym.make through the wrapper's **kwargs. SAPIEN's default
+      # shader allocates a full set of per-camera render targets (normals,
+      # albedo, position, segmentation); 'minimal' keeps only what the
+      # observation needs. At num_envs=128 with a 128^2 sensor camera and a
+      # 512^2 human render camera per env, the default shader exhausts GPU
+      # memory during camera-group creation.
+      shader_dir: minimal
+
+  run:
+    eval_freq: 50000
+    eval_video_freq: 0
+    eval_reconfiguration_frequency: 1
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  maniskill_rgb — mirrors dreamerv3-maniskill-hab's preset of the same name.
+#  Run with:  python -m dreamerv3.main_maniskill --configs maniskill_rgb \
+#               --task maniskill_PickCube-v1 --logdir ...
+#  Compose the HTP variant on top, e.g.
+#             --configs maniskill_rgb corewm_full
+# ──────────────────────────────────────────────────────────────────────────────
+
+maniskill_rgb:
+  task: maniskill_PickCube-v1
+  # size100m, inlined: YAML anchors do not cross documents, so `<<: *size100m`
+  # from configs.yaml cannot be referenced here.
+  .*\.rssm: {deter: 6144, hidden: 768, classes: 48}
+  .*\.depth: 48
+  .*\.units: 768
+  run:
+    envs: 1
+    eval_envs: 4
+    eval_eps: 1
+    eval_freq: 50000
+    eval_video_freq: 1000000
+    train_ratio: 64.0   # lower than state: CNN encoder adds cost per update
+    steps: 2e6
+    log_every: 1500
+    save_every: -1        # no checkpointing
+    report_every: 7200
+    exact_env_action_budget: false  # rejected by train_maniskill; see its docstring
+  batch_size: 32        # smaller: [16, 64, 64, 64, 9] RGB tensors are large
+  batch_length: 64
+  replay_context: 1
+  replay:
+    size: 300000        # TD-MPC2 rgb: buffer_size=100_000 (pixels expensive)
+    online: true
+    fracs: {uniform: 1.0, priority: 0.0, recency: 0.0}
+  jax:
+    prealloc: false     # critical: ManiSkill and JAX share GPU
+  logger:
+    # The reference sets logger.wandb_project / wandb_entity / wandb_group /
+    # wandb_name here. New_HTP's make_logger reads those from the WANDB_*
+    # environment variables instead, so those keys are omitted. Override with
+    # `--logger.outputs jsonl` for a local smoke test without W&B.
+    outputs: [wandb]
+  env:
+    maniskill:
+      use_seed: true
+      num_envs: 128
+      obs_mode: rgb
+      sim_backend: gpu
+      image_size: 128
+      control_mode: pd_joint_delta_pos
+      num_frames: 1          # no frame stacking → 3 channels input to CNN
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  maniskill_rgb_eval_ready — maniskill_rgb with the settings the CoRe-WM
+#  block/prefix evaluation (corewm_eval.manuscript_suite) needs from a
+#  checkpoint it is later pointed at:
+#
+#    * save_every > 0, so checkpoints exist at all;
+#    * image_size 64, matching the encoder/decoder resolution the Atari
+#      manuscript runs use, which keeps the decoder grids comparable;
+#    * obs_mode rgb and num_frames 1, inherited from maniskill_rgb: the
+#      evaluation decodes an `image` key and the figure grids expect 3
+#      channels per frame.
+#
+#  No horizon override is needed. The protocol needs
+#  corewm_eval.config.MIN_CLIP_LENGTH = 16 warm-up + 16 imagined + 1 initial
+#  = 33 frames in a single episode, which fits inside the 50 steps that
+#  PickCube-v1, StackCube-v1 and PushCube-v1 register natively.
+#  PullCubeTool-v1 keeps its native 100. The max_episode_steps /
+#  eval_max_episode_steps knobs below stay available as an escape hatch for a
+#  task that registers fewer than 33 steps.
+# ──────────────────────────────────────────────────────────────────────────────
+
+maniskill_rgb_eval_ready:
+  task: maniskill_PickCube-v1
+  run:
+    save_every: 900
+  env:
+    maniskill:
+      image_size: 64

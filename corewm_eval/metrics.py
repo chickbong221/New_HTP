@@ -63,6 +63,89 @@ def reconstruction_metrics(h, cumulative_recons, block_dimensions):
   return errors, gains, gains_per_dim
 
 
+def horizon_indices(horizons):
+  """Array index of each reported horizon in a rollout: index = h - 1."""
+  indices = [int(h) - 1 for h in horizons]
+  if any(index < 0 for index in indices):
+    raise ValueError(f'Horizons must be >= 1: {tuple(horizons)}')
+  return indices
+
+
+def pixel_mae(prediction, target):
+  """Per-frame mean |prediction - target|, reducing every non-leading axis."""
+  prediction = _finite('prediction', prediction).astype(np.float64)
+  target = _finite('target', target).astype(np.float64)
+  if prediction.shape != target.shape:
+    raise ValueError((prediction.shape, target.shape))
+  if prediction.ndim < 2:
+    raise ValueError(f'Expected a leading frame axis, got {prediction.shape}')
+  return np.abs(prediction - target).mean(axis=tuple(range(1, prediction.ndim)))
+
+
+def prefix_error_matrix(prefix_images, ground_truth, horizons):
+  """[num_prefixes, num_horizons] pixel MAE, E_l(h).
+
+  Every representation at a horizon is scored against the same ground-truth
+  frame, which is why the horizon selection happens here rather than in each
+  caller.
+  """
+  index = horizon_indices(horizons)
+  target = np.asarray(ground_truth)[index]
+  return np.stack([
+      pixel_mae(np.asarray(image)[index], target) for image in prefix_images])
+
+
+def full_error_row(full_images, ground_truth, horizons):
+  """[num_horizons] pixel MAE of the full RSSM feature, E_full(h)."""
+  index = horizon_indices(horizons)
+  return pixel_mae(
+      np.asarray(full_images)[index], np.asarray(ground_truth)[index])
+
+
+def performance_gap(prefix_mae, full_mae):
+  """G_l(h) = E_l(h) - E_full(h); positive means worse than the full RSSM."""
+  prefix_mae = _finite('prefix_mae', prefix_mae).astype(np.float64)
+  full_mae = _finite('full_mae', full_mae).astype(np.float64)
+  if prefix_mae.ndim != 2 or full_mae.ndim != 1:
+    raise ValueError((prefix_mae.shape, full_mae.shape))
+  if prefix_mae.shape[1] != full_mae.shape[0]:
+    raise ValueError((prefix_mae.shape, full_mae.shape))
+  return prefix_mae - full_mae[None, :]
+
+
+def marginal_block_gain(prefix_mae):
+  """Delta_l(h) = E_{l-1}(h) - E_l(h) for blocks 2..L; positive means better.
+
+  Block 1 has no row because there is no Prefix 0 to improve on.
+  """
+  prefix_mae = _finite('prefix_mae', prefix_mae).astype(np.float64)
+  if prefix_mae.ndim != 2 or len(prefix_mae) < 2:
+    raise ValueError(prefix_mae.shape)
+  return prefix_mae[:-1] - prefix_mae[1:]
+
+
+def marginal_visual_change(prefix_images, horizons):
+  """C_l(h) = mean |I_l(h) - I_{l-1}(h)| for blocks 2..L.
+
+  Says how much the decoded image moved when a block was added; pair it with
+  marginal_block_gain, which says whether the move helped.
+  """
+  index = horizon_indices(horizons)
+  return np.stack([
+      pixel_mae(np.asarray(current)[index], np.asarray(previous)[index])
+      for previous, current in zip(prefix_images[:-1], prefix_images[1:])])
+
+
+def off_diagonal_mean(matrix):
+  """Mean of the strict upper triangle of a symmetric matrix."""
+  matrix = _finite('matrix', matrix).astype(np.float64)
+  if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+    raise ValueError(matrix.shape)
+  if len(matrix) < 2:
+    raise ValueError('Off-diagonal mean needs at least two blocks')
+  return float(matrix[np.triu_indices(len(matrix), 1)].mean())
+
+
 def linear_cka(x, y):
   x = _finite('x', x).astype(np.float64)
   y = _finite('y', y).astype(np.float64)

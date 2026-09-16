@@ -126,9 +126,19 @@ def open_loop_readonly(agent, start_state, actions, spec, seed, params=None):
 
 
 def previous_actions(actions, cardinality=None):
+  """Shift an action sequence one step along TIME, which is axis 0.
+
+  Callers pass the recorded actions of a single clip, so axis 0 is time and
+  any trailing axis is the action itself. Shifting along the last axis is the
+  same operation only when the action is a scalar per step (Atari); for a
+  continuous action vector (ManiSkill, shape [T, act_dim]) it would rotate
+  coordinates inside the vector instead of stepping back in time.
+  """
   actions = np.asarray(actions)
+  if actions.ndim < 1:
+    raise ValueError(f'Expected a time axis, got shape {actions.shape}')
   previous = np.zeros_like(actions)
-  previous[..., 1:] = actions[..., :-1]
+  previous[1:] = actions[:-1]
   if cardinality is not None and (
       (previous < 0).any() or (previous >= cardinality).any()):
     raise ValueError('Action outside cardinality')

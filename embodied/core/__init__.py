@@ -3,6 +3,7 @@ from .base import Agent, Env
 from .clock import GlobalClock
 from .clock import LocalClock
 from .driver import Driver
+from .driver_batched import BatchedDriver
 from .random import RandomAgent
 from .replay import Replay
 from .wrappers import Wrapper

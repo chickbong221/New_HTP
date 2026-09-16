@@ -135,7 +135,12 @@ def main(argv=None):
 
 def make_agent(config):
   from .agent_htp import Agent_HTP
-  env = make_env(config, 0)
+  if config.task.split('_', 1)[0] == 'maniskill':
+    # Build with num_envs=1 just for obs/act space discovery, so shape
+    # discovery does not spin up the full GPU vector env a second time.
+    env = make_env(config, 0, num_envs=1)
+  else:
+    env = make_env(config, 0)
   notlog = lambda k: not k.startswith('log/')
   obs_space = {k: v for k, v in env.obs_space.items() if notlog(k)}
   act_space = {k: v for k, v in env.act_space.items() if k != 'reset'}
@@ -238,6 +243,8 @@ def make_env(config, index, **overrides):
   if suite == 'memmaze':
     from embodied.envs import from_gym
     import memory_maze  # noqa
+  if suite == 'maniskill':
+    return make_maniskill_env(config, index, task, **overrides)
   ctor = {
       'dummy': 'embodied.envs.dummy:Dummy',
       'gym': 'embodied.envs.from_gym:FromGym',
@@ -268,6 +275,31 @@ def make_env(config, index, **overrides):
     kwargs['logdir'] = elements.Path(config.logdir) / f'env{index}'
   env = ctor(task, **kwargs)
   return wrap_env(env, config)
+
+
+def make_maniskill_env(config, index, task, **overrides):
+  """One embodied.Env wrapping N GPU sub-envs (ManiSkillVectorEnv).
+
+  The maniskill defaults live in configs_maniskill.yaml, which only
+  dreamerv3.main_maniskill merges into the config tree; a config read back
+  from a run's logdir already contains them. wrap_env is deliberately skipped:
+  the batched [N, ...] obs/act spaces are not compatible with the scalar
+  wrappers (NormalizeAction / UnifyDtypes / CheckSpaces / ClipAction).
+  """
+  from embodied.envs.maniskill import ManiSkill
+  # dict(): config.env.maniskill is an immutable Config whose .update() returns
+  # a new object instead of mutating. Without the copy a num_envs=1 discovery
+  # override would be silently dropped.
+  kwargs = dict(config.env.get('maniskill', {}))
+  kwargs.update(overrides)
+  if kwargs.pop('use_seed', False):
+    # ManiSkill expands this into one seed per parallel sub-environment using
+    # signed integer containers in parts of the stack, so keep the high bit
+    # clear -- 2**31-1, not 2**32-1 as the scalar suites use.
+    kwargs['seed'] = hash((config.seed, index)) % (2 ** 31 - 1)
+  if kwargs.pop('use_logdir', False):
+    kwargs['logdir'] = elements.Path(config.logdir) / f'env{index}'
+  return ManiSkill(task, **kwargs)
 
 
 def wrap_env(env, config):
