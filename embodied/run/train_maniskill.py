@@ -16,6 +16,8 @@ and would step over a milestone, so such a checkpoint cannot be labeled exact.
 """
 
 import collections
+import pathlib
+import shutil
 from functools import partial as bind
 from time import time
 
@@ -467,19 +469,34 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
   cp.step = step
   cp.agent = agent
 
-  # Exactly one checkpoint, overwritten in place. elements.Checkpoint.save()
-  # with no argument writes ckpt/<timestamp>/, which leaves one directory per
-  # save; writing into the checkpoint directory itself leaves ckpt/agent.pkl
-  # and nothing beside it. A periodic run.save_every is then pure crash
-  # insurance, each save replacing the last, and the end-of-training save
-  # rewrites the same files. run.checkpoint_dir moves it out of the log tree.
+  # Exactly one checkpoint. elements.Checkpoint.save() with no argument writes
+  # ckpt/<timestamp>/, leaving one directory per save, so a path is passed
+  # instead. run.checkpoint_dir moves it out of the log tree.
   ckpt_dir = (
       elements.Path(_arg('checkpoint_dir', '')) if _arg('checkpoint_dir', '')
       else logdir / 'ckpt')
   print('Checkpoint:', ckpt_dir)
 
   def save_checkpoint():
-    cp.save(ckpt_dir)
+    """Write to a staging directory, then rename it into place.
+
+    Saving straight into the checkpoint directory works the first time and
+    kills the process on the next one, once that directory already holds a
+    checkpoint. Every save therefore writes a directory that does not exist
+    yet. The rename is atomic within a filesystem, so this also means a crash
+    during a save leaves the previous checkpoint intact rather than a
+    half-written one -- the run still ends with exactly one checkpoint.
+    """
+    target = pathlib.Path(str(ckpt_dir))
+    staging = target.with_name(target.name + '.saving')
+    previous = target.with_name(target.name + '.previous')
+    shutil.rmtree(staging, ignore_errors=True)
+    cp.save(elements.Path(str(staging)))
+    shutil.rmtree(previous, ignore_errors=True)
+    if target.exists():
+      target.rename(previous)
+    staging.rename(target)
+    shutil.rmtree(previous, ignore_errors=True)
 
   # The reference omits the replay buffer from ManiSkill checkpoints: a
   # 300k-transition RGB buffer makes every save stall the run.
@@ -578,7 +595,13 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
       logger.write()
 
     if should_save and should_save(step):
-      save_checkpoint()
+      try:
+        save_checkpoint()
+      except Exception as exc:
+        # A periodic save is crash insurance, not the deliverable. Losing one
+        # must not end a multi-day run; the next save, or the final one, can
+        # still succeed, and the previous checkpoint is still on disk.
+        print(f'Could not save checkpoint: {exc}')
 
   # Rewrites the same checkpoint one last time, so whatever the periodic saves
   # left behind is replaced by the end-of-training state.
