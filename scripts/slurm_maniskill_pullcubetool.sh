@@ -12,8 +12,10 @@
 # manuscript block/prefix evaluation on the checkpoint training leaves behind.
 #
 # maniskill_rgb carries the agreed settings -- size50m, 126 GPU envs, 128px
-# RGB, pd_ee_delta_pos, nonprivileged_obs=false, shader_dir=minimal,
-# batch_size 8, a 600k-transition replay -- so nothing here overrides them.
+# RGB, pd_ee_delta_pos, nonprivileged_obs=false, shader_dir=minimal, a
+# 600k-transition replay. The one override is --batch_size 32 (the preset has
+# 8). train_ratio counts replayed steps per env step, so the total replayed
+# is unchanged and the run takes a quarter as many updates, each 4x larger.
 # PullCubeTool-v1 defaults to the plain panda, which has no wrist camera: one
 # base_camera, a 3-channel image, and ~29.5 GB of pixels in the replay. The
 # task registers a 100-step horizon, well above the 33 frames the evaluation
@@ -35,7 +37,7 @@ echo "Job started on $(hostname)"
 echo "Job ID: $SLURM_JOB_ID"
 echo "GPUs allocated: $CUDA_VISIBLE_DEVICES"
 echo "Arm: CoRe-WM full (corewm_full), ManiSkill PullCubeTool-v1"
-echo "Budget: 4M steps, 50M model, one checkpoint overwritten hourly"
+echo "Budget: 4M steps, 50M model, batch 32, one checkpoint overwritten hourly"
 echo "Evaluation: manuscript block/prefix suite on the final checkpoint"
 echo "================================="
 
@@ -109,6 +111,7 @@ python -m dreamerv3.main_maniskill \
   --configs maniskill_rgb corewm_full \
   --task maniskill_PullCubeTool-v1 \
   --seed 42 \
+  --batch_size 32 \
   --run.steps 4e6 \
   --run.save_every 3600 \
   --run.checkpoint_dir $CKPT_PATH \
