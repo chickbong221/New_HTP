@@ -43,6 +43,10 @@ defaults:
     eval_freq: 50000
     eval_video_freq: 0
     eval_reconfiguration_frequency: 1
+    # Where the single, overwritten checkpoint is written. '' keeps it at
+    # <logdir>/ckpt. Point it outside the log tree so clearing a logdir cannot
+    # take the checkpoint the evaluation is read from.
+    checkpoint_dir: ''
 
   # W&B settings as config keys. configs.yaml has no such keys -- upstream
   # make_logger reads WANDB_* from the environment -- and elements.Config

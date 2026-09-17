@@ -91,7 +91,7 @@ def one_step_positions(available):
   return [p for p in wanted if p < int(available)]
 
 
-def worker(out, game, seed, checkpoint=None):
+def worker(out, game, seed, checkpoint=None, config_file=None):
   import elements
   from dreamerv3 import main_htp
   from .smoke_test import _load_config, _tree_hash
@@ -106,7 +106,8 @@ def worker(out, game, seed, checkpoint=None):
   from . import manuscript_figures as figures
   cp = resolve_checkpoint(checkpoint) if checkpoint else source(game, seed)
   print(f'Checkpoint: {cp}')
-  config = _load_config(config_path(cp))
+  # A checkpoint kept outside its log tree has no config.yaml above it to find.
+  config = _load_config(Path(config_file) if config_file else config_path(cp))
   config = config.update(logdir=str(out / game / f'seed_{seed}/runtime'))
   agent = main_htp.make_agent(config)
   loaded = elements.Checkpoint(); loaded.agent = agent; loaded.load(cp, keys=['agent'])
@@ -368,6 +369,8 @@ def main():
   p.add_argument('--seed', type=int, default=0)
   p.add_argument('--checkpoint', help='explicit checkpoint directory; skips '
                                       'the Atari production layout lookup')
+  p.add_argument('--config', help='run config.yaml; needed when the '
+                                  'checkpoint lives outside its log tree')
   p.add_argument('--report', action='store_true')
   p.add_argument('--maniskill', action='store_true',
                  help='write the ManiSkill report instead of the Atari one')
@@ -375,7 +378,7 @@ def main():
   if args.report:
     report_maniskill(args.out) if args.maniskill else report(args.out)
   elif args.game:
-    worker(args.out, args.game, args.seed, args.checkpoint)
+    worker(args.out, args.game, args.seed, args.checkpoint, args.config)
   else:
     # Only the unattended 130-checkpoint sweep is Slurm-only; a single
     # checkpoint is also run as a Slurm subprocess from here, and is allowed

@@ -472,8 +472,11 @@ def train(make_agent, make_replay, make_env, make_stream, make_logger, args):
   # save; writing into the checkpoint directory itself leaves ckpt/agent.pkl
   # and nothing beside it. A periodic run.save_every is then pure crash
   # insurance, each save replacing the last, and the end-of-training save
-  # rewrites the same files.
-  ckpt_dir = logdir / 'ckpt'
+  # rewrites the same files. run.checkpoint_dir moves it out of the log tree.
+  ckpt_dir = (
+      elements.Path(_arg('checkpoint_dir', '')) if _arg('checkpoint_dir', '')
+      else logdir / 'ckpt')
+  print('Checkpoint:', ckpt_dir)
 
   def save_checkpoint():
     cp.save(ckpt_dir)
