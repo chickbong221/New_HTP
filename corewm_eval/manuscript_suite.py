@@ -110,8 +110,22 @@ def worker(out, game, seed, checkpoint=None, config_file=None):
   config = _load_config(Path(config_file) if config_file else config_path(cp))
   config = config.update(logdir=str(out / game / f'seed_{seed}/runtime'))
   agent = main_htp.make_agent(config)
+  # make_agent returns freshly initialised weights. Nothing downstream fails
+  # if the checkpoint does not reach them -- the evaluation just decodes an
+  # untrained model into plausible-looking noise -- so compare against the
+  # initialisation rather than trusting the load.
+  initialised = _tree_hash(agent.save()['params'])
   loaded = elements.Checkpoint(); loaded.agent = agent; loaded.load(cp, keys=['agent'])
   before = _tree_hash(agent.save()['params']); updates = int(agent.n_updates)
+  if before == initialised:
+    raise RuntimeError(
+        f'Loading {cp} left every parameter at its initial value, so the '
+        'checkpoint never reached the agent. The figures would show an '
+        'untrained decoder.')
+  print(f'Loaded {updates} optimizer updates from the checkpoint')
+  if updates == 0:
+    raise RuntimeError(
+        f'{cp} restored 0 optimizer updates: it holds an untrained agent.')
   sha = digest(cp / 'agent.pkl')
   suite = str(config.task).split('_', 1)[0]
   dyn = config.agent.dyn[config.agent.dyn.typ]
@@ -158,7 +172,8 @@ def worker(out, game, seed, checkpoint=None, config_file=None):
     all_z.append(result['one_z'])
     if episode == 0:
       figures.decoded_matrix(
-          destination / 'decoded_matrix.png', gt, full_images, prefix_images)
+          destination / 'decoded_matrix.png', gt, full_images, prefix_images,
+          posterior=result['posterior'][0])
       figures.pixel_error_vs_ground_truth(
           destination / 'pixel_error_gt.png', gt, full_images, prefix_images)
       figures.pixel_change_between_prefixes(

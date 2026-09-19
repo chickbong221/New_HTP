@@ -53,12 +53,22 @@ def added_block_labels(count):
   return [f'Add B{i + 2}' for i in range(count)]
 
 
-def decoded_matrix(path, ground_truth, full, prefixes, horizons=HORIZONS):
-  """Rows are horizons; columns are GT, Full, P1..PL."""
+def decoded_matrix(path, ground_truth, full, prefixes, horizons=HORIZONS,
+                   posterior=None):
+  """Rows are horizons; columns are GT, [Posterior,] Full, P1..PL.
+
+  The optional posterior column is the same frame decoded with the real
+  observation fed in, so a reader can tell open-loop prediction error apart
+  from a decode that is broken outright.
+  """
   index = horizon_indices(horizons)
-  columns = ['GT', 'Full'] + prefix_labels(len(prefixes))
-  panels = [np.asarray(ground_truth)[index], np.asarray(full)[index],
-            *[np.asarray(p)[index] for p in prefixes]]
+  columns = ['GT'] + (['Posterior'] if posterior is not None else []) + [
+      'Full'] + prefix_labels(len(prefixes))
+  panels = [np.asarray(ground_truth)[index]]
+  if posterior is not None:
+    panels.append(np.asarray(posterior)[index])
+  panels += [np.asarray(full)[index],
+             *[np.asarray(p)[index] for p in prefixes]]
   plt = _pyplot()
   fig, axes = plt.subplots(
       len(index), len(columns),

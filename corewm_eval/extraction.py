@@ -23,6 +23,17 @@ def evaluation_seed(global_seed, episode_id, start_timestep=0, stream=0):
 
 
 def _flat_to_feat(h, spec):
+  # A spec that disagrees with the checkpoint splits h at the wrong offset and
+  # hands the decoder two halves of the wrong tensors, which decodes to noise
+  # rather than failing. Check it instead: the dims come from the run config,
+  # and a preset that resized the RSSM without the spec following would land
+  # here.
+  expected = spec.deter_dim + int(np.prod(spec.stoch_shape))
+  if h.shape[-1] != expected:
+    raise ValueError(
+        f'Latent is {h.shape[-1]} wide but the extraction spec describes '
+        f'{expected} (deter {spec.deter_dim} + stoch '
+        f'{spec.stoch_shape}). The spec does not match this checkpoint.')
   return {
       'deter': h[..., :spec.deter_dim],
       'stoch': h[..., spec.deter_dim:].reshape(

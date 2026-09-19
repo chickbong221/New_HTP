@@ -42,7 +42,15 @@ def _evaluate(model, obs, prevact, actions, spec, start):
   future_h = model.feat2h(future)
   future_z = model.htp_proj(future_h)
   prefix_h = model.htp_recon.reconstruct(future_z, future_h)
+  # The same target frames decoded from the posterior instead of the rollout.
+  # This is the teacher-forced reconstruction the training report shows in its
+  # green half, so it separates a broken decode from an imagination the model
+  # simply cannot do yet: if this column is sharp, the weights and the decode
+  # path are fine and the error downstream is open-loop prediction error.
+  post = {k: posterior[k][:, start + 1:start + 1 + ROLLOUT_LENGTH]
+          for k in ('deter', 'stoch')}
   return {'one_z': one_z[:, 0], 'one_full': decode(one_h)[:, 0],
+          'posterior': decode(model.feat2h(post)),
           'one_blocks': tuple(decode(x)[:, 0] for x in isolated),
           'full': decode(future_h), 'prefixes': tuple(decode(x) for x in prefix_h),
           'used_actions': used}
