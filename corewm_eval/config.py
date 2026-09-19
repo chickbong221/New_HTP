@@ -18,8 +18,27 @@ ATARI100K_GAMES = (
 # Phase-2 integration diagnostic (E_h / E_prefix / E_backbone / E_total), a
 # different measurement with an already-published artifact, not this protocol.
 # --------------------------------------------------------------------------
-MANUSCRIPT_START = 16            # T: posterior index the imagination starts at
-HORIZONS = (1, 2, 4, 8, 16)      # reported horizons h; array index is h - 1
+# A 16-step rollout from a 16-frame warm-up left the measurement with no
+# dynamic range on ManiSkill: on PullCubeTool the open-loop MAE over 16 steps
+# was 0.0067 against a teacher-forced floor of 0.0061, so the whole horizon
+# axis spanned less than a tenth of the decoder's own reconstruction error and
+# prefix depth had nothing to separate. Two changes buy that range back.
+#
+# MANUSCRIPT_START = 0 removes the warm-up: the RSSM sees the reset frame and
+# nothing else, then imagines. The posterior at t=0 is the one the agent
+# itself forms at an episode start, so this is in distribution, not a
+# degenerate state -- it is simply a much weaker conditioning signal than a
+# 16-frame history.
+#
+# ROLLOUT_LENGTH follows max(HORIZONS) = 64, which is where the Atari curves
+# began to separate. Compounding error needs room to compound.
+#
+# Consequence: MIN_CLIP_LENGTH is now 65, so a task registering fewer than 65
+# steps can no longer be evaluated. PullCubeTool-v1 and PegInsertionSide-v1
+# register 100 and are fine; PickCube-v1, StackCube-v1 and PushCube-v1
+# register 50 and now need env.maniskill.max_episode_steps raised.
+MANUSCRIPT_START = 0             # T: posterior index the imagination starts at
+HORIZONS = (4, 8, 16, 32, 64)    # reported horizons h; array index is h - 1
 ROLLOUT_LENGTH = max(HORIZONS)   # imagined steps taken from the posterior at T
 NUM_PREFIXES = 5                 # cumulative prefixes P1..P5
 # T warm-up transitions + ROLLOUT_LENGTH imagined transitions + initial frame.

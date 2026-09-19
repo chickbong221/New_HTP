@@ -35,15 +35,17 @@ def rollout():
 
 def test_exactly_five_horizons_with_a_matching_rollout_length():
   assert len(HORIZONS) == 5
-  assert HORIZONS == (1, 2, 4, 8, 16)
-  assert ROLLOUT_LENGTH == max(HORIZONS) == 16
-  assert MANUSCRIPT_START == 16
-  assert MIN_CLIP_LENGTH == MANUSCRIPT_START + ROLLOUT_LENGTH + 1 == 33
+  assert HORIZONS == (4, 8, 16, 32, 64)
+  assert ROLLOUT_LENGTH == max(HORIZONS) == 64
+  # No warm-up: the imagination starts from the posterior formed at the reset
+  # frame, so the clip only has to carry that frame plus the imagined span.
+  assert MANUSCRIPT_START == 0
+  assert MIN_CLIP_LENGTH == MANUSCRIPT_START + ROLLOUT_LENGTH + 1 == 65
   assert CLIP_LENGTH >= MIN_CLIP_LENGTH
 
 
 def test_horizon_h_maps_to_array_index_h_minus_one():
-  assert horizon_indices(HORIZONS) == [0, 1, 3, 7, 15]
+  assert horizon_indices(HORIZONS) == [3, 7, 15, 31, 63]
   with pytest.raises(ValueError):
     horizon_indices((0, 1))
 
@@ -113,7 +115,7 @@ def test_off_diagonal_mean_ignores_the_unit_diagonal():
 def test_each_horizon_is_scored_against_ground_truth_frame_start_plus_h():
   # Frame i carries the constant value i, so a misalignment of even one step
   # shows up as a MAE of exactly that offset.
-  clip = np.stack([np.full(SHAPE, float(i)) for i in range(64)])
+  clip = np.stack([np.full(SHAPE, float(i)) for i in range(MIN_CLIP_LENGTH)])
   target = clip[MANUSCRIPT_START + 1:MANUSCRIPT_START + ROLLOUT_LENGTH + 1]
   for horizon in HORIZONS:
     assert target[horizon - 1][0, 0, 0] == MANUSCRIPT_START + horizon
@@ -124,7 +126,7 @@ def test_each_horizon_is_scored_against_ground_truth_frame_start_plus_h():
 
 
 def test_every_representation_at_a_horizon_shares_one_ground_truth_frame():
-  clip = np.stack([np.full(SHAPE, float(i)) for i in range(64)])
+  clip = np.stack([np.full(SHAPE, float(i)) for i in range(MIN_CLIP_LENGTH)])
   target = clip[MANUSCRIPT_START + 1:MANUSCRIPT_START + ROLLOUT_LENGTH + 1]
   prefixes = [target + offset for offset in range(NUM_PREFIXES)]
   matrix = prefix_error_matrix(prefixes, target, HORIZONS)

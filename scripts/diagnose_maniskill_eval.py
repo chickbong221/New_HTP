@@ -218,8 +218,10 @@ def check_report(agent, clip, length, out):
   plt.close(fig)
   print(f'wrote {out / "report_openloop.png"} ({len(grid)} frames; within '
         'each frame the rows are true / prediction / error)')
-  print('VERDICT: read it directly. Sharp here while check 3 is noise means '
-        'the fault is in the read-only harness, not the checkpoint.')
+  print('VERDICT: compare it against decoded_checkpoint.png from check 3. '
+        'Sharp here and noise there puts the fault in the read-only harness; '
+        'sharp in both means neither the checkpoint nor either decode path is '
+        'what produced the published figures, and the clip is what differs.')
 
 
 def load_clip(args, agent, config):
@@ -293,7 +295,10 @@ def main():
 
   if not args.skip_report:
     _rule('4. the report path W&B draws, on the same clip')
-    check_report(agent, clip, 2 * MANUSCRIPT_START, args.out)
+    # report() always splits its window in half, so it cannot mirror a
+    # protocol with no warm-up. Give it the whole clip and read it as a
+    # qualitative check on the decode rather than as the same measurement.
+    check_report(agent, clip, len(clip['image']) // 2 * 2, args.out)
 
 
 if __name__ == '__main__':

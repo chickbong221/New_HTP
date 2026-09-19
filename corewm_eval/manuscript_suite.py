@@ -85,10 +85,14 @@ def config_path(checkpoint):
 
 
 def one_step_positions(available):
-  """Absolute timesteps shown in the qualitative block-only figure."""
+  """Absolute timesteps shown in the qualitative block-only figure.
+
+  Deduplicated: without a warm-up the first three candidates all collapse to
+  t=0, and the figure would then plot the same frame in three columns.
+  """
   wanted = (0, MANUSCRIPT_START // 2, MANUSCRIPT_START,
             MANUSCRIPT_START + ROLLOUT_LENGTH)
-  return [p for p in wanted if p < int(available)]
+  return sorted({p for p in wanted if p < int(available)})
 
 
 def worker(out, game, seed, checkpoint=None, config_file=None):
@@ -289,7 +293,10 @@ def _section(out, name, results):
 
 def _preamble():
   return [
-      f'Protocol: posterior warm-up to t={MANUSCRIPT_START}, then a '
+      'Protocol: ' + (
+          'no warm-up -- the posterior is formed from the reset frame alone'
+          if MANUSCRIPT_START == 0 else
+          f'posterior warm-up to t={MANUSCRIPT_START}') + ', then a '
       f'{ROLLOUT_LENGTH}-action open-loop RSSM rollout on the ground-truth '
       f'action sequence. Reported horizons {list(HORIZONS)}; horizon h is '
       'scored against ground-truth frame T+h, and every representation at a '

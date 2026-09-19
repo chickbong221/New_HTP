@@ -134,13 +134,13 @@ maniskill_rgb:
 #  obs_mode rgb and num_frames 1 are required, not cosmetic: the evaluation
 #  decodes an `image` key and the figures tile 3-channel views.
 #
-#  No horizon override is needed. The protocol needs
-#  corewm_eval.config.MIN_CLIP_LENGTH = 16 warm-up + 16 imagined + 1 initial
-#  = 33 frames in a single episode, which fits inside the 50 steps that
-#  PickCube-v1, StackCube-v1 and PushCube-v1 register natively.
-#  PullCubeTool-v1 keeps its native 100. The max_episode_steps /
-#  eval_max_episode_steps knobs stay available as an escape hatch for a task
-#  that registers fewer than 33 steps.
+#  The protocol needs corewm_eval.config.MIN_CLIP_LENGTH = 0 warm-up + 64
+#  imagined + 1 initial = 65 frames in a single episode. PullCubeTool-v1 and
+#  PegInsertionSide-v1 register 100 natively and need no override.
+#  PickCube-v1, StackCube-v1 and PushCube-v1 register only 50 and no longer
+#  fit: raise env.maniskill.max_episode_steps (and eval_max_episode_steps)
+#  above 65 for those, or clip collection fails with an explicit error rather
+#  than joining two episodes.
 # ──────────────────────────────────────────────────────────────────────────────
 
 maniskill_rgb_eval_ready:
